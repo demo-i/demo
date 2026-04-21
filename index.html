@@ -326,6 +326,21 @@
         display: block;
       }
 
+      .arch-svg-wrap {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem;
+        overflow-x: auto;
+      }
+
+      .arch-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+      }
+
       .arch-top-row {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1108,53 +1123,195 @@
       <!-- Architecture Overview -->
       <section id="arch" class="architecture">
         <h2><span class="icon">🏗️</span> Architecture du SoC</h2>
-        <pre>
-      +-----------------------------------------------------------------------+
-      |                           CVA6 RISC-V SoC                             |
-      |                                                                       |
-      |  +-----------+       +-----------+              +-----------+         |
-      |  |    LHA    |       |    MHA    |              |   CVA6    |         |
-      |  |  ID = 1   |       |  ID = 2   |              |   CPU     |         |
-      |  | Legitimate|       | Attacker  |              | (Master)  |         |
-      |  +-----+-----+       +-----+-----+              +-----+-----+         |
-      |        | DMA               | DMA                      | MMIO           |
-      |        +---------+---------+                          |                |
-      |                  |                                    | prog IF        |
-      |            +-----v-------------------+                |                |
-      |            |      AXI Mux 2:1        |----------------+                |
-      |            |       (LHA/MHA)         |                                 |
-      |            +------------+------------+                                 |
-      |                         | DMA                                          |
-      |                         v                                              |
-      |            +-----------------------------+                             |
-      |            |         RISC-V IOMMU        |                             |
-      |            |      DDT: ID=1 OK, ID=2 BLOQUE   |                         |
-      |            +---------------+-------------+                             |
-      |                            | Completion IF                             |
-      |                            v                                           |
-      |      +---------------------------------------------------------+       |
-      |      |                 AXI Crossbar (XBAR)                    |       |
-      |      |                 System Interconnect                    |       |
-      |      +------------------------------+--------------------------+       |
-      |                                     |                                  |
-      |                                     v                                  |
-      |      +---------------------------------------------------------+       |
-      |      |                      DRAM (DDR3)                        |       |
-      |      |               OpenSBI | BAO | Guest VM                  |       |
-      |      +---------------------------------------------------------+       |
-      +-----------------------------------------------------------------------+
+        <div class="arch-svg-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 720" role="img" aria-labelledby="archTitle archDesc" class="arch-svg">
+          <title id="archTitle">CVA6 RISC-V SoC Architecture</title>
+          <desc id="archDesc">Architecture du SoC : wrappers LHA/MHA contenant les registres MMIO et le cœur DMA, AXI mux, RISC-V IOMMU avec ddtp, XBAR, DRAM.</desc>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
 
-  Légende:
-    ─── DMA (master) : données envoyées par les accélérateurs
-    cfg : registres de configuration (slave), programmés par le CPU
-    prog IF : interface de programmation IOMMU (DDTP, FQ, etc.)
-</pre>
+          <!-- =============================================================== -->
+          <!--   STYLE TOKENS                                                    -->
+          <!--    DMA path  : solid white arrows                                 -->
+          <!--    MMIO path : dashed violet arrows                               -->
+          <!--    Wrappers  : green (LHA legit) / orange (MHA attacker), dashed  -->
+          <!--    IOMMU     : amber                                              -->
+          <!--    XBAR      : blue                                               -->
+          <!-- =============================================================== -->
+
+          <!-- SoC boundary -->
+          <rect x="20" y="20" width="760" height="680" rx="14" fill="none" stroke="#5a5a55" stroke-width="1" stroke-dasharray="6 4"/>
+          <text x="36" y="40" fill="#cfcfc8" font-family="'Segoe UI',sans-serif" font-size="12">CVA6 RISC-V SoC</text>
+
+          <!-- =============================================================== -->
+          <!--   ROW 1 : LHA wrapper · MHA wrapper · CPU + IOMMU regs            -->
+          <!-- =============================================================== -->
+          <!-- LHA wrapper (legit, ID=1) -->
+          <g>
+            <rect x="50" y="60" width="200" height="160" rx="8" fill="#0e2620" stroke="#3fc69a" stroke-width="1" stroke-dasharray="5 3"/>
+            <text x="150" y="80" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="11" font-weight="600" fill="#9eecd0">lha_wrap</text>
+            <text x="150" y="94" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#7fd6b5">DEVICE_ID = 1 · legitimate</text>
+
+            <!-- MMIO regs strip -->
+            <rect x="60" y="104" width="180" height="44" rx="5" fill="#16332a" stroke="#3fc69a" stroke-width="0.6"/>
+            <text x="150" y="118" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="9" fill="#7fd6b5">MMIO regs (axi_cfg @ 0x5000_0000)</text>
+            <text x="150" y="132" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#cfead8">CTRL · STATUS · BASE_ADDR</text>
+            <text x="150" y="143" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#cfead8">SIZE · CONFIG</text>
+
+            <!-- Core -->
+            <rect x="60" y="156" width="180" height="40" rx="6" fill="#1c4538" stroke="#3fc69a" stroke-width="0.8"/>
+            <text x="150" y="174" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="600" fill="#9eecd0">LHA core</text>
+            <text x="150" y="188" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="9" fill="#7fd6b5">DMA master</text>
+
+            <text x="150" y="212" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#7fd6b5">axi_dma → IOMMU  (stream_id = 1)</text>
+          </g>
+
+          <!-- MHA wrapper (attacker, ID=2) -->
+          <g>
+            <rect x="290" y="60" width="200" height="160" rx="8" fill="#2a130b" stroke="#d96a3b" stroke-width="1" stroke-dasharray="5 3"/>
+            <text x="390" y="80" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="11" font-weight="600" fill="#f1b59a">mha_wrap</text>
+            <text x="390" y="94" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#e8987a">DEVICE_ID = 2 · SPOOFED = 1 · attacker</text>
+
+            <rect x="300" y="104" width="180" height="44" rx="5" fill="#3a1d12" stroke="#d96a3b" stroke-width="0.6"/>
+            <text x="390" y="118" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="9" fill="#e8987a">MMIO regs (axi_cfg @ 0x5000_1000)</text>
+            <text x="390" y="132" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#f5d8c6">CTRL · STATUS · BASE_ADDR</text>
+            <text x="390" y="143" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#f5d8c6">SIZE · CONFIG</text>
+
+            <rect x="300" y="156" width="180" height="40" rx="6" fill="#48241a" stroke="#d96a3b" stroke-width="0.8"/>
+            <text x="390" y="174" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="600" fill="#f1b59a">MHA core</text>
+            <text x="390" y="188" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="9" fill="#e8987a">DMA master</text>
+
+            <text x="390" y="212" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#e8987a">axi_dma → IOMMU  (stream_id = 2)</text>
+          </g>
+
+          <!-- CPU + IOMMU regs (right column, single panel) -->
+          <g>
+            <rect x="520" y="60" width="240" height="68" rx="8" fill="#1f1f4a" stroke="#7c73ff" stroke-width="1"/>
+            <text x="640" y="90" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#cfc9ff">CVA6 CPU</text>
+            <text x="640" y="108" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#a9a1ff">programme MMIO &amp; IOMMU</text>
+          </g>
+
+          <g>
+            <rect x="520" y="140" width="240" height="80" rx="8" fill="#1a1a26" stroke="#7f77dd" stroke-width="1"/>
+            <text x="640" y="158" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="600" fill="#cfc9ff">IOMMU_CFG @ 0x5001_0000</text>
+
+            <rect x="532" y="166" width="216" height="26" rx="5" fill="#2a2310" stroke="#d4a042" stroke-width="1"/>
+            <text x="640" y="180" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="11" font-weight="600" fill="#f3d59a">ddtp  (offset 0x10)</text>
+            <text x="640" y="190" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="8.5" fill="#d4b170">PPN(DDT) | mode {OFF, BARE, 1LVL}</text>
+          </g>
+
+          <!-- =============================================================== -->
+          <!--   ROW 2 : AXI Mux 2:1                                             -->
+          <!-- =============================================================== -->
+
+          <!-- DMA arrows wrappers → mux -->
+          <line x1="150" y1="220" x2="150" y2="258" stroke="#cfcfc8" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <line x1="390" y1="220" x2="390" y2="258" stroke="#cfcfc8" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+          <g>
+            <rect x="60" y="260" width="440" height="44" rx="8" fill="#102a3f" stroke="#4ea3e8" stroke-width="1"/>
+            <text x="280" y="280" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#bfdcf5">AXI Mux 2:1</text>
+            <text x="280" y="296" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#8fb8d8">arbitre LHA / MHA · injecte stream_id selon le port</text>
+          </g>
+
+          <!-- =============================================================== -->
+          <!--   ROW 3 : RISC-V IOMMU                                            -->
+          <!-- =============================================================== -->
+
+          <line x1="280" y1="304" x2="280" y2="338" stroke="#cfcfc8" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="288" y="326" font-family="'Segoe UI',sans-serif" font-size="10" fill="#a9a9a3">DMA + stream_id</text>
+
+          <g>
+            <rect x="60" y="340" width="440" height="60" rx="8" fill="#3a2a09" stroke="#d4a042" stroke-width="1"/>
+            <text x="280" y="362" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#f3d59a">RISC-V IOMMU</text>
+            <text x="280" y="380" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#d4b170">DDT lookup via <tspan font-family="'JetBrains Mono',monospace" fill="#f3d59a">ddtp</tspan> · IOTLB=8 · DDTC=4</text>
+            <text x="280" y="394" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#d4b170">ID = 1 ✓ allowed   ·   ID = 2 ✗ blocked → SLVERR</text>
+          </g>
+
+          <!-- =============================================================== -->
+          <!--   ROW 4 : XBAR (full width)                                       -->
+          <!-- =============================================================== -->
+
+          <line x1="280" y1="400" x2="280" y2="438" stroke="#cfcfc8" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+          <g>
+            <rect x="40" y="440" width="720" height="60" rx="8" fill="#102a3f" stroke="#4ea3e8" stroke-width="1"/>
+            <text x="400" y="462" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#bfdcf5">AXI Crossbar</text>
+            <text x="400" y="480" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="10" fill="#8fb8d8">DMA_CFG 0x5000_0000  ·  DMA_CFG2 0x5000_1000  ·  IOMMU_CFG 0x5001_0000  ·  DRAM 0x8000_0000</text>
+            <text x="400" y="494" text-anchor="middle" font-family="'JetBrains Mono','Consolas',monospace" font-size="9" fill="#7fa8c8">axi_slaves_t : IOMMU_CFG=1 · DMA_CFG=2 · DMA_CFG2=3</text>
+          </g>
+
+          <!-- =============================================================== -->
+          <!--   MMIO PATHS (dashed violet) — routed through CLEAR corridors    -->
+          <!--    • Trunk CPU → XBAR : right outer corridor (x=750)             -->
+          <!--    • Branch → LHA    : left outer corridor   (x=25)              -->
+          <!--    • Branch → MHA    : mid-right corridor    (x=510, between      -->
+          <!--                          IOMMU right edge x=500 and IOMMU_CFG     -->
+          <!--                          left edge x=520)                        -->
+          <!--    • Branch → IOMMU  : direct vertical x=640 (free between        -->
+          <!--                          IOMMU_CFG bottom y=220 and XBAR y=440)   -->
+          <!-- =============================================================== -->
+
+          <!-- Trunk: CPU → XBAR -->
+          <path d="M640 128 L750 128 L750 440" fill="none" stroke="#7f77dd" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+          <!-- Branch: XBAR → LHA wrapper (enters from left side) -->
+          <path d="M50 440 L25 440 L25 130 L50 130" fill="none" stroke="#7f77dd" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+          <!-- Branch: XBAR → MHA wrapper (enters from right side) -->
+          <path d="M490 440 L510 440 L510 130 L490 130" fill="none" stroke="#7f77dd" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+          <!-- Branch: XBAR → IOMMU_CFG (enters from bottom) -->
+          <path d="M640 440 L640 220" fill="none" stroke="#7f77dd" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+          <!-- =============================================================== -->
+          <!--   ROW 5 : DRAM                                                    -->
+          <!-- =============================================================== -->
+
+          <line x1="400" y1="500" x2="400" y2="538" stroke="#cfcfc8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+          <g>
+            <rect x="40" y="540" width="720" height="80" rx="8" fill="#2a2823" stroke="#9c9990" stroke-width="1"/>
+            <text x="400" y="562" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#e0ddd0">DRAM (DDR3) @ 0x8000_0000</text>
+            <text x="400" y="578" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="10" fill="#b8b5a8">DDT (pointée par <tspan font-family="'JetBrains Mono',monospace" fill="#f3d59a">ddtp</tspan>) · OpenSBI · BAO · Guest VM</text>
+
+            <rect x="160" y="592" width="100" height="20" rx="6" fill="#143b30" stroke="#3fc69a" stroke-width="0.6"/>
+            <text x="210" y="602" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',sans-serif" font-size="10" fill="#9eecd0">OpenSBI</text>
+            <rect x="350" y="592" width="100" height="20" rx="6" fill="#1f1f4a" stroke="#7c73ff" stroke-width="0.6"/>
+            <text x="400" y="602" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',sans-serif" font-size="10" fill="#cfc9ff">BAO Hypervisor</text>
+            <rect x="540" y="592" width="100" height="20" rx="6" fill="#3a2a09" stroke="#d4a042" stroke-width="0.6"/>
+            <text x="590" y="602" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',sans-serif" font-size="10" fill="#f3d59a">Guest VM</text>
+          </g>
+
+          <!-- =============================================================== -->
+          <!--   LEGEND (compact — long descriptions live in HTML below)         -->
+          <!-- =============================================================== -->
+          <g>
+            <line x1="60" y1="660" x2="100" y2="660" stroke="#cfcfc8" stroke-width="1.2" marker-end="url(#arrow)"/>
+            <text x="108" y="664" font-family="'Segoe UI',sans-serif" font-size="10.5" fill="#cfcfc8">DMA (accélérateur → IOMMU → DRAM)</text>
+
+            <line x1="360" y1="660" x2="400" y2="660" stroke="#7f77dd" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+            <text x="408" y="664" font-family="'Segoe UI',sans-serif" font-size="10.5" fill="#cfcfc8">MMIO (CPU → XBAR → LHA / MHA / IOMMU_CFG)</text>
+          </g>
+        </svg>
+        </div>
         <div class="legend">
-          <strong>Principe :</strong> Le CPU configure LHA/MHA en MMIO et
+          <p><strong>Principe :</strong> Le CPU configure LHA/MHA en MMIO et
           programme l'IOMMU via l'interface de configuration. Chaque requête
           DMA passe par le mux, puis par l'IOMMU qui consulte la DDT.
           <code>device_id=1</code> (LHA) est autorisé, <code>device_id=2</code>
-          (MHA) est bloqué et reçoit <code>SLVERR</code>.
+          (MHA) est bloqué et reçoit <code>SLVERR</code>.</p>
+          <p><strong>Accélérateurs :</strong> ce sont des <em>DMA masters</em>.
+          Le CPU écrit <code>START</code> / <code>BASE_ADDR</code> / <code>SIZE</code>
+          dans leurs registres MMIO via le XBAR&nbsp;; ils émettent alors une
+          requête AXI taguée <code>stream_id = DEVICE_ID</code> qui passe par
+          l'IOMMU.</p>
+          <p><strong>XBAR :</strong> route les écritures du CPU vers
+          <code>DMA_CFG</code> (lha_wrap), <code>DMA_CFG2</code> (mha_wrap)
+          ou <code>IOMMU_CFG</code> selon l'adresse.</p>
         </div>
       </section>
 
