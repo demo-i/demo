@@ -1,0 +1,1481 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrustGW-SoC — Démonstration IOMMU vs Attaques DMA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.css"
+    />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --surface: rgba(17, 21, 28, 0.95);
+        --surface-elevated: rgba(22, 27, 36, 0.98);
+        --border: rgba(48, 54, 61, 0.5);
+        --border-accent: rgba(88, 166, 255, 0.3);
+        --text: #f0f6fc;
+        --text-secondary: #c9d1d9;
+        --text-muted: #8b949e;
+        --accent: #58a6ff;
+        --accent-bright: #79c0ff;
+        --success: #56d364;
+        --success-dim: #238636;
+        --danger: #ff7b72;
+        --danger-dim: #da3633;
+        --warning: #e3b341;
+        --purple: #a371f7;
+        --gradient-hero: linear-gradient(
+          135deg,
+          #58a6ff 0%,
+          #a371f7 50%,
+          #f778ba 100%
+        );
+        --gradient-success: linear-gradient(135deg, #56d364 0%, #3fb950 100%);
+        --gradient-danger: linear-gradient(135deg, #ff7b72 0%, #f85149 100%);
+        --glow-accent: 0 0 40px rgba(88, 166, 255, 0.15);
+        --glow-success: 0 0 30px rgba(86, 211, 100, 0.1);
+        --glow-danger: 0 0 30px rgba(255, 123, 114, 0.1);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      ::selection {
+        background: rgba(88, 166, 255, 0.3);
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.7;
+        min-height: 100vh;
+      }
+
+      /* ===== HERO SECTION ===== */
+      .hero {
+        position: relative;
+        padding: 5rem 2rem 4rem;
+        text-align: center;
+        background:
+          radial-gradient(
+            ellipse 80% 50% at 50% -20%,
+            rgba(88, 166, 255, 0.15),
+            transparent
+          ),
+          radial-gradient(
+            ellipse 60% 40% at 80% 100%,
+            rgba(163, 113, 247, 0.1),
+            transparent
+          );
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+      }
+
+      .hero::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        opacity: 0.5;
+      }
+
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(88, 166, 255, 0.1);
+        border: 1px solid rgba(88, 166, 255, 0.2);
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 1.5rem;
+      }
+
+      .hero-badge::before {
+        content: "●";
+        color: var(--success);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .hero h1 {
+        font-size: clamp(2rem, 5vw, 3.2rem);
+        font-weight: 800;
+        margin-bottom: 1rem;
+        background: var(--gradient-hero);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+      }
+
+      .hero .subtitle {
+        font-size: 1.15rem;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto 2rem;
+        font-weight: 400;
+      }
+
+      .tech-stack {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 2rem;
+      }
+
+      .tech-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        transition: all 0.2s;
+      }
+
+      .tech-badge:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        transform: translateY(-1px);
+      }
+
+      .tech-badge svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+
+      /* ===== STATS BAR ===== */
+      .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin: 2rem auto;
+        max-width: 700px;
+      }
+
+      .stat-item {
+        background: var(--surface);
+        padding: 1.25rem 1rem;
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--accent);
+        margin-bottom: 0.25rem;
+      }
+
+      .stat-value.success {
+        color: var(--success);
+      }
+      .stat-value.danger {
+        color: var(--danger);
+      }
+      .stat-value.warning {
+        color: var(--warning);
+      }
+
+      .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+
+      /* ===== CONTAINER ===== */
+      .container {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 3rem 2rem;
+      }
+
+      /* ===== NAV TOC ===== */
+      .nav-toc {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 3rem;
+        padding: 1rem;
+        background: var(--surface);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+      }
+
+      .nav-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 0.8rem;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+
+      .nav-link:hover {
+        background: rgba(88, 166, 255, 0.1);
+        color: var(--accent);
+      }
+
+      .nav-link .num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        background: var(--border);
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+      }
+
+      /* ===== ARCHITECTURE ===== */
+      .architecture {
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 3rem;
+        box-shadow: var(--glow-accent);
+      }
+
+      .architecture h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .architecture h2 .icon {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(88, 166, 255, 0.1);
+        border-radius: 8px;
+        font-size: 1rem;
+      }
+
+      .architecture pre {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.72rem;
+        overflow-x: auto;
+        white-space: pre;
+        color: var(--text-muted);
+        line-height: 1.4;
+        letter-spacing: 0;
+        padding: 1.25rem;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        display: block;
+      }
+
+      .arch-top-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.9rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .arch-box {
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.22);
+        padding: 0.9rem;
+        text-align: center;
+      }
+
+      .arch-box h3 {
+        font-size: 0.92rem;
+        font-weight: 700;
+        margin-bottom: 0.2rem;
+      }
+
+      .arch-box p {
+        margin: 0;
+        font-size: 0.74rem;
+        color: var(--text-secondary);
+        line-height: 1.45;
+      }
+
+      .arch-box small {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .arch-lha {
+        border-color: rgba(86, 211, 100, 0.35);
+        background: rgba(86, 211, 100, 0.09);
+      }
+
+      .arch-lha h3 {
+        color: var(--success);
+      }
+
+      .arch-mha {
+        border-color: rgba(255, 123, 114, 0.35);
+        background: rgba(255, 123, 114, 0.09);
+      }
+
+      .arch-mha h3 {
+        color: var(--danger);
+      }
+
+      .arch-cpu {
+        border-color: rgba(163, 113, 247, 0.35);
+        background: rgba(163, 113, 247, 0.11);
+      }
+
+      .arch-cpu h3 {
+        color: var(--purple);
+      }
+
+      .arch-mid-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.9rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .arch-mux {
+        grid-column: span 2;
+      }
+
+      .arch-arrows-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.6rem;
+        margin: 0.15rem 0 0.75rem;
+      }
+
+      .arch-arrow {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        letter-spacing: 0.03em;
+        padding: 0.2rem 0.35rem;
+        border: 1px dashed rgba(139, 148, 158, 0.35);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .arch-arrow .arr {
+        font-size: 0.9rem;
+        color: var(--accent-bright);
+        margin-right: 0.25rem;
+      }
+
+      .arch-arrow.span2 {
+        grid-column: span 2;
+      }
+
+      .arch-mux {
+        border-color: rgba(88, 166, 255, 0.35);
+        background: rgba(88, 166, 255, 0.09);
+      }
+
+      .arch-mux h3 {
+        color: var(--accent);
+      }
+
+      .arch-iommu {
+        border-color: rgba(163, 113, 247, 0.35);
+        background: rgba(163, 113, 247, 0.1);
+      }
+
+      .arch-iommu h3 {
+        color: var(--purple);
+      }
+
+      .arch-iommu .ok {
+        color: var(--success);
+        font-weight: 600;
+      }
+
+      .arch-iommu .blocked {
+        color: var(--danger);
+        font-weight: 600;
+      }
+
+      .arch-bottom {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+      }
+
+      .arch-xbar {
+        border-color: rgba(88, 166, 255, 0.3);
+        background: rgba(88, 166, 255, 0.06);
+      }
+
+      .arch-xbar h3 {
+        color: var(--accent);
+      }
+
+      .arch-dram {
+        border-color: rgba(120, 130, 145, 0.45);
+        background: rgba(120, 130, 145, 0.08);
+      }
+
+      .arch-dram h3 {
+        color: var(--text);
+      }
+
+      .arch-dram p {
+        color: var(--text-secondary);
+      }
+
+      .arch-info {
+        margin-top: 0.9rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.6rem;
+      }
+
+      .arch-chip {
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 0.6rem;
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .arch-chip strong {
+        color: var(--text);
+      }
+
+      .architecture .legend {
+        margin-top: 1.25rem;
+        padding: 1rem;
+        background: rgba(88, 166, 255, 0.05);
+        border-radius: 8px;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+      }
+
+      /* ===== SCENARIO CARDS ===== */
+      .scenario {
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease,
+          border-color 0.3s;
+      }
+
+      .scenario::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--gradient-hero);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .scenario:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        border-color: var(--border-accent);
+      }
+
+      .scenario:hover::before {
+        opacity: 1;
+      }
+
+      .scenario-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .scenario-number {
+        width: 44px;
+        height: 44px;
+        background: var(--gradient-hero);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 1.2rem;
+        color: white;
+        flex-shrink: 0;
+        box-shadow: 0 4px 15px rgba(88, 166, 255, 0.25);
+      }
+
+      .scenario-title-group {
+        flex: 1;
+      }
+
+      .scenario h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.25rem;
+        color: var(--text);
+      }
+
+      .scenario-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+
+      .scenario .description {
+        color: var(--text-secondary);
+        margin-bottom: 1.5rem;
+        padding: 1.25rem;
+        background: rgba(0, 0, 0, 0.25);
+        border-radius: 10px;
+        border-left: 3px solid var(--accent);
+        font-size: 0.92rem;
+        line-height: 1.75;
+      }
+
+      .scenario .description code {
+        background: rgba(88, 166, 255, 0.15);
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.85em;
+        color: var(--accent-bright);
+      }
+
+      .attack-brief {
+        margin: -0.5rem 0 1.25rem;
+        padding: 0.85rem 1rem;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(88, 166, 255, 0.06);
+      }
+
+      .attack-brief p {
+        margin: 0.25rem 0;
+        color: var(--text-secondary);
+        font-size: 0.86rem;
+        line-height: 1.5;
+      }
+
+      .attack-brief p strong {
+        color: var(--text);
+      }
+
+      .scenario .expected {
+        margin: 1.5rem 0 0;
+        padding: 1rem 1.25rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+      }
+
+      .expected .icon {
+        font-size: 1.2rem;
+        line-height: 1;
+      }
+
+      .expected-blocked {
+        background: rgba(86, 211, 100, 0.08);
+        border: 1px solid rgba(86, 211, 100, 0.25);
+        color: var(--success);
+      }
+
+      .expected-pass {
+        background: rgba(255, 123, 114, 0.08);
+        border: 1px solid rgba(255, 123, 114, 0.25);
+        color: var(--danger);
+      }
+
+      .expected-info {
+        background: rgba(88, 166, 255, 0.08);
+        border: 1px solid rgba(88, 166, 255, 0.25);
+        color: var(--accent);
+      }
+
+      /* ===== PLAYER CONTAINER ===== */
+      .player-container {
+        margin: 1rem auto;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #0d1117;
+        padding: 0.5rem;
+        width: 100%;
+        box-shadow:
+          0 8px 30px rgba(0, 0, 0, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        overflow: hidden;
+      }
+
+      /* Asciinema player responsive */
+      .player-container > div {
+        width: 100% !important;
+      }
+
+      .player-label {
+        text-align: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.5rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 6px;
+      }
+
+      .player-label.off {
+        background: rgba(255, 123, 114, 0.1);
+        color: var(--danger);
+      }
+
+      .player-label.on {
+        background: rgba(86, 211, 100, 0.1);
+        color: var(--success);
+      }
+
+      /* ===== COMPARISON ===== */
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        margin: 1.5rem 0;
+      }
+
+      @media (min-width: 768px) {
+        .comparison {
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+      }
+
+      .comparison .col {
+        min-width: 0; /* Important pour que le grid puisse shrink */
+      }
+
+      .comparison .col h3 {
+        text-align: center;
+        margin-bottom: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .col-off h3 {
+        color: var(--danger);
+      }
+      .col-on h3 {
+        color: var(--success);
+      }
+
+      /* ===== TAGS ===== */
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 5px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .tag-blocked {
+        background: var(--gradient-success);
+        color: #0a0c10;
+      }
+
+      .tag-vuln {
+        background: var(--gradient-danger);
+        color: white;
+      }
+
+      .tag-dos {
+        background: linear-gradient(135deg, #e3b341 0%, #d29922 100%);
+        color: #0a0c10;
+      }
+
+      .tag-demo {
+        background: rgba(163, 113, 247, 0.2);
+        border: 1px solid rgba(163, 113, 247, 0.3);
+        color: var(--purple);
+      }
+
+      /* ===== FOOTER ===== */
+      footer {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        margin-top: 3rem;
+      }
+
+      .footer-logo {
+        font-size: 1.5rem;
+        font-weight: 800;
+        background: var(--gradient-hero);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 1rem;
+      }
+
+      .footer-info {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        line-height: 1.8;
+      }
+
+      .footer-links {
+        display: flex;
+        justify-content: center;
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      .footer-links a {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 0.8rem;
+        transition: color 0.2s;
+      }
+
+      .footer-links a:hover {
+        color: var(--accent);
+      }
+
+      /* ===== RESPONSIVE ===== */
+      @media (max-width: 1024px) {
+        .container {
+          padding: 2rem 1.5rem;
+        }
+        .scenario {
+          padding: 1.75rem;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .hero {
+          padding: 2.5rem 1rem 2rem;
+        }
+        .hero h1 {
+          font-size: 1.6rem;
+        }
+        .hero .subtitle {
+          font-size: 0.95rem;
+        }
+        .container {
+          padding: 1.5rem 1rem;
+        }
+        .nav-toc {
+          flex-direction: column;
+          gap: 0.25rem;
+          padding: 0.75rem;
+        }
+        .nav-link {
+          justify-content: center;
+        }
+        .scenario {
+          padding: 1.25rem;
+          margin-bottom: 1.5rem;
+          border-radius: 12px;
+        }
+        .scenario-header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.75rem;
+        }
+        .scenario-number {
+          width: 36px;
+          height: 36px;
+          font-size: 1rem;
+        }
+        .scenario h2 {
+          font-size: 1.1rem;
+        }
+        .scenario .description {
+          padding: 1rem;
+          font-size: 0.88rem;
+          line-height: 1.6;
+        }
+        .stats-bar {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .stat-value {
+          font-size: 1.25rem;
+        }
+        .tech-stack {
+          gap: 0.5rem;
+        }
+        .tech-badge {
+          font-size: 0.7rem;
+          padding: 0.3rem 0.6rem;
+        }
+        .arch-top-row {
+          grid-template-columns: 1fr;
+        }
+        .arch-mid-row {
+          grid-template-columns: 1fr;
+        }
+        .arch-mux {
+          grid-column: auto;
+        }
+        .arch-arrows-row {
+          grid-template-columns: 1fr;
+          gap: 0.4rem;
+        }
+        .arch-arrow.span2 {
+          grid-column: auto;
+        }
+        .arch-info {
+          grid-template-columns: 1fr;
+        }
+        .arch-box {
+          padding: 0.8rem;
+        }
+        .arch-box h3 {
+          font-size: 0.88rem;
+        }
+        .arch-box p {
+          font-size: 0.72rem;
+        }
+        .player-container {
+          margin: 0.75rem -0.25rem;
+          border-radius: 8px;
+          padding: 0.4rem;
+        }
+        .player-label {
+          font-size: 0.65rem;
+          padding: 0.35rem 0.5rem;
+        }
+        .expected {
+          font-size: 0.85rem;
+          padding: 0.85rem 1rem;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .step-list li {
+          font-size: 0.85rem;
+          gap: 0.75rem;
+        }
+        footer {
+          padding: 2rem 1rem;
+        }
+        .footer-logo {
+          font-size: 1.25rem;
+        }
+        .footer-info {
+          font-size: 0.8rem;
+        }
+        .footer-links {
+          gap: 1rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          font-size: 14px;
+        }
+        .hero {
+          padding: 2rem 0.75rem 1.5rem;
+        }
+        .hero h1 {
+          font-size: 1.4rem;
+        }
+        .hero-badge {
+          font-size: 0.65rem;
+          padding: 0.4rem 0.8rem;
+        }
+        .container {
+          padding: 1rem 0.75rem;
+        }
+        .scenario {
+          padding: 1rem;
+        }
+        .scenario h2 {
+          font-size: 1rem;
+        }
+        .stats-bar {
+          gap: 1px;
+        }
+        .stat-item {
+          padding: 1rem 0.5rem;
+        }
+        .stat-value {
+          font-size: 1.1rem;
+        }
+        .stat-label {
+          font-size: 0.6rem;
+        }
+        .architecture {
+          padding: 1.25rem;
+        }
+        .arch-box {
+          padding: 0.75rem;
+        }
+        .arch-arrow {
+          font-size: 0.65rem;
+        }
+        .arch-box h3 {
+          font-size: 0.82rem;
+        }
+        .arch-box p {
+          font-size: 0.7rem;
+        }
+        .tag {
+          font-size: 0.6rem;
+          padding: 0.2rem 0.5rem;
+        }
+      }
+
+      /* ===== STEP LIST ===== */
+      .step-list {
+        margin: 1rem 0 1.5rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      .step-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
+      .step-list li:last-child {
+        border-bottom: none;
+      }
+
+      .step-num {
+        width: 24px;
+        height: 24px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+
+      .step-num.success {
+        border-color: var(--success);
+        color: var(--success);
+      }
+      .step-num.danger {
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+      .step-num.warning {
+        border-color: var(--warning);
+        color: var(--warning);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- HERO SECTION -->
+    <section class="hero">
+      <div class="hero-badge">Démonstration</div>
+      <h1>TrustGW-SoC Security Demo</h1>
+      <p class="subtitle">
+        Démonstration IOMMU RISC-V contre 5 vecteurs d'attaque DMA sur FPGA
+      </p>
+
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-value">5</div>
+          <div class="stat-label">Scénarios</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value success">3</div>
+          <div class="stat-label">Bloqués</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value danger">1</div>
+          <div class="stat-label">Vulnérable</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value warning">1</div>
+          <div class="stat-label">DoS Partiel</div>
+        </div>
+      </div>
+
+      <div class="tech-stack">
+        <span class="tech-badge">RISC-V CVA6</span>
+        <span class="tech-badge">IOMMU Spec 1.0</span>
+        <span class="tech-badge">Genesys 2 FPGA</span>
+        <span class="tech-badge">BAO Hypervisor</span>
+        <span class="tech-badge">OpenSBI</span>
+      </div>
+    </section>
+
+    <div class="container">
+      <!-- NAVIGATION -->
+      <nav class="nav-toc">
+        <a href="#arch" class="nav-link"
+          ><span class="num">◆</span> Architecture</a
+        >
+        <a href="#s1" class="nav-link"><span class="num">1</span> Normal</a>
+        <a href="#s2" class="nav-link"
+          ><span class="num">2</span> ID Spoofing</a
+        >
+        <a href="#s3" class="nav-link"
+          ><span class="num">3</span> Adresse Interdite</a
+        >
+        <a href="#s4" class="nav-link"><span class="num">4</span> Privilèges</a>
+        <a href="#s5" class="nav-link"><span class="num">5</span> DoS</a>
+      </nav>
+
+      <!-- Architecture Overview -->
+      <section id="arch" class="architecture">
+        <h2><span class="icon">🏗️</span> Architecture du SoC</h2>
+        <pre>
+      +-----------------------------------------------------------------------+
+      |                           CVA6 RISC-V SoC                             |
+      |                                                                       |
+      |  +-----------+       +-----------+              +-----------+         |
+      |  |    LHA    |       |    MHA    |              |   CVA6    |         |
+      |  |  ID = 1   |       |  ID = 2   |              |   CPU     |         |
+      |  | Legitimate|       | Attacker  |              | (Master)  |         |
+      |  +-----+-----+       +-----+-----+              +-----+-----+         |
+      |        | DMA               | DMA                      | MMIO           |
+      |        +---------+---------+                          |                |
+      |                  |                                    | prog IF        |
+      |            +-----v-------------------+                |                |
+      |            |      AXI Mux 2:1        |----------------+                |
+      |            |       (LHA/MHA)         |                                 |
+      |            +------------+------------+                                 |
+      |                         | DMA                                          |
+      |                         v                                              |
+      |            +-----------------------------+                             |
+      |            |         RISC-V IOMMU        |                             |
+      |            |      DDT: ID=1 OK, ID=2 BLOQUE   |                         |
+      |            +---------------+-------------+                             |
+      |                            | Completion IF                             |
+      |                            v                                           |
+      |      +---------------------------------------------------------+       |
+      |      |                 AXI Crossbar (XBAR)                    |       |
+      |      |                 System Interconnect                    |       |
+      |      +------------------------------+--------------------------+       |
+      |                                     |                                  |
+      |                                     v                                  |
+      |      +---------------------------------------------------------+       |
+      |      |                      DRAM (DDR3)                        |       |
+      |      |               OpenSBI | BAO | Guest VM                  |       |
+      |      +---------------------------------------------------------+       |
+      +-----------------------------------------------------------------------+
+
+  Légende:
+    ─── DMA (master) : données envoyées par les accélérateurs
+    cfg : registres de configuration (slave), programmés par le CPU
+    prog IF : interface de programmation IOMMU (DDTP, FQ, etc.)
+</pre>
+        <div class="legend">
+          <strong>Principe :</strong> Le CPU configure LHA/MHA en MMIO et
+          programme l'IOMMU via l'interface de configuration. Chaque requête
+          DMA passe par le mux, puis par l'IOMMU qui consulte la DDT.
+          <code>device_id=1</code> (LHA) est autorisé, <code>device_id=2</code>
+          (MHA) est bloqué et reçoit <code>SLVERR</code>.
+        </div>
+      </section>
+
+      <!-- Scenario 1: Normal Attack (IOMMU OFF vs ON) -->
+      <section id="s1" class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-number">1</div>
+          <div class="scenario-title-group">
+            <h2>Attaque Normale — Comparaison IOMMU</h2>
+            <div class="scenario-meta">
+              <span class="tag tag-demo">Référence</span>
+            </div>
+          </div>
+        </div>
+        <p class="description">
+          Le MHA (<code>device_id=2</code>) tente d'écrire dans la zone mémoire
+          du guest VM (<code>0x91000000</code>) en utilisant son vrai
+          identifiant. Comparaison directe du comportement
+          <strong>sans protection</strong> vs
+          <strong>avec IOMMU activée</strong>.
+        </p>
+        <div class="attack-brief">
+          <p><strong>Objectif :</strong> Établir un cas de référence en comparant le même trafic DMA avec IOMMU désactivée puis activée.</p>
+          <p><strong>Preuve observée :</strong> OFF = 100/100 SUCCESS, ON = 100/100 BLOCKED.</p>
+          <p><strong>Conclusion :</strong> Le filtrage IOMMU fondé sur la DDT bloque effectivement les requêtes du <code>device_id=2</code>.</p>
+        </div>
+
+        <div class="comparison">
+          <div class="col col-off">
+            <div class="player-label off">❌ IOMMU OFF — Passthrough</div>
+            <div class="player-container">
+              <div id="player-1a"></div>
+            </div>
+          </div>
+          <div class="col col-on">
+            <div class="player-label on">✓ IOMMU ON — Protection Active</div>
+            <div class="player-container">
+              <div id="player-1b"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="expected expected-blocked">
+          <span class="icon">🛡️</span>
+          <div>
+            <strong>Résultat :</strong> IOMMU OFF →
+            <em>100/100 SUCCESS</em> (vulnérable). IOMMU ON →
+            <em>100/100 BLOCKED</em> (<code>DDT[2].tc.V=0</code> → SLVERR).
+          </div>
+        </div>
+      </section>
+
+      <!-- Scenario 2: ID Spoofing -->
+      <section id="s2" class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-number">2</div>
+          <div class="scenario-title-group">
+            <h2>Usurpation d'Identité (ID Spoofing)</h2>
+            <div class="scenario-meta">
+              <span class="tag tag-vuln">⚠️ Vulnérable</span>
+            </div>
+          </div>
+        </div>
+        <p class="description">
+          Le MHA tente d'usurper l'identifiant du LHA (<code>device_id=1</code>)
+          pour contourner l'IOMMU. Il envoie ses requêtes DMA avec
+          <code>stream_id = 1</code> au lieu de <code>2</code>. <br /><br />
+          <strong>Vulnérabilité :</strong> Le mux AXI sélectionne le sideband
+          <code>stream_id</code> du bon port physique (MHA), mais ne vérifie
+          <em>pas</em> que la valeur correspond au vrai
+          <code>DEVICE_ID</code> du hardware. Si le MHA envoie
+          <code>stream_id=1</code>, l'IOMMU voit <code>device_id=1</code> →
+          consulte <code>DDT[1].tc.V=1</code> → autorise ! <br /><br />
+          <strong>Solution :</strong> Le wrapper <strong>ARMOR</strong> (absent
+          dans cette version) compare le <code>stream_id</code> émis par le
+          device à son paramètre <code>DEVICE_ID</code>
+          câblé en dur. En cas de mismatch → transaction bloquée avant l'IOMMU.
+        </p>
+        <div class="attack-brief">
+          <p><strong>Objectif :</strong> Contourner la politique DDT en usurpant l'identité d'un périphérique autorisé.</p>
+          <p><strong>Preuve observée :</strong> Les traces montrent des accès autorisés lorsque MHA émet <code>stream_id=1</code>.</p>
+          <p><strong>Conclusion :</strong> Sans vérification d'intégrité du <code>stream_id</code>, l'IOMMU seule est insuffisante.</p>
+        </div>
+
+        <div class="player-container">
+          <div id="player-2"></div>
+        </div>
+
+        <div class="expected expected-pass">
+          <span class="icon">⚠️</span>
+          <div>
+            <strong>Résultat :</strong> L'attaque <em>PASSE</em> ! Le MHA usurpe
+            l'ID=1, l'IOMMU consulte <code>DDT[1]</code> (valide) et autorise
+            l'accès.
+            <strong
+              >Sans ARMOR, l'IOMMU seule ne peut pas empêcher le spoofing
+              d'identité.</strong
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- Scenario 3: Forbidden Address -->
+      <section id="s3" class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-number">3</div>
+          <div class="scenario-title-group">
+            <h2>Accès à une Adresse Interdite</h2>
+            <div class="scenario-meta">
+              <span class="tag tag-blocked">Bloqué</span>
+            </div>
+          </div>
+        </div>
+        <p class="description">
+          Le MHA cible directement la mémoire du firmware OpenSBI
+          (<code>0x80002700</code>) ou de l'hyperviseur BAO
+          (<code>0x80200000</code>) — des zones critiques hors partition guest.
+          L'IOMMU bloque car <code>device_id=2</code> n'est pas autorisé dans la
+          DDT.
+        </p>
+        <div class="attack-brief">
+          <p><strong>Objectif :</strong> Écrire dans des zones critiques (OpenSBI/BAO) depuis un DMA non autorisé.</p>
+          <p><strong>Preuve observée :</strong> Les transactions vers ces adresses retournent systématiquement <em>BLOCKED</em>.</p>
+          <p><strong>Conclusion :</strong> Le contrôle par <code>device_id</code> empêche l'accès, y compris sur des cibles sensibles.</p>
+        </div>
+
+        <div class="player-container">
+          <div id="player-3"></div>
+        </div>
+
+        <div class="expected expected-blocked">
+          <span class="icon">🛡️</span>
+          <div>
+            <strong>Résultat :</strong> <em>BLOCKED</em> — Peu importe l'adresse
+            cible, le <code>device_id=2</code> n'a pas d'entrée valide. Toute
+            requête rejetée.
+          </div>
+        </div>
+      </section>
+
+      <!-- Scenario 4: Privilege Escalation -->
+      <section id="s4" class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-number">4</div>
+          <div class="scenario-title-group">
+            <h2>Escalade de Privilèges</h2>
+            <div class="scenario-meta">
+              <span class="tag tag-blocked">Bloqué</span>
+            </div>
+          </div>
+        </div>
+        <p class="description">
+          Le MHA tente d'accéder à la mémoire avec des attributs de protection
+          AXI élevés (<code>AxPROT[0]=1</code>, mode privilégié). L'objectif est
+          de contourner les protections en se faisant passer pour un accès
+          superviseur/machine.
+          <br /><br />
+          <strong>Mécanisme de défense :</strong> L'IOMMU identifie les devices
+          par leur <code>device_id</code>, pas par les bits AxPROT. Ces
+          attributs ne changent rien à la décision de la DDT.
+        </p>
+        <div class="attack-brief">
+          <p><strong>Objectif :</strong> Forcer un accès privilégié via les attributs AXI (<code>AxPROT</code>).</p>
+          <p><strong>Preuve observée :</strong> Le résultat demeure <em>BLOCKED</em>, identique au mode normal.</p>
+          <p><strong>Conclusion :</strong> La décision d'autorisation dépend du <code>device_id</code>, et non de <code>AxPROT</code>.</p>
+        </div>
+
+        <div class="player-container">
+          <div id="player-4"></div>
+        </div>
+
+        <div class="expected expected-blocked">
+          <span class="icon">🛡️</span>
+          <div>
+            <strong>Résultat :</strong> <em>BLOCKED</em> — L'IOMMU ne se base
+            pas sur AxPROT. Seul le <code>device_id</code> compte → ID=2 reste
+            non-valide.
+          </div>
+        </div>
+      </section>
+
+      <!-- Scenario 5: DoS -->
+      <section id="s5" class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-number">5</div>
+          <div class="scenario-title-group">
+            <h2>Attaque par Déni de Service (DoS)</h2>
+            <div class="scenario-meta">
+              <span class="tag tag-dos">DoS Partiel</span>
+            </div>
+          </div>
+        </div>
+        <p class="description">
+          Le MHA envoie une rafale de requêtes DMA à haute fréquence pour
+          saturer l'IOMMU. Chaque requête rejetée génère une entrée dans la
+          <strong>Fault Queue</strong> (FQ). <br /><br />
+          <strong>Mécanisme :</strong> Quand la FQ est pleine, l'IOMMU
+          <strong>stalle</strong>
+          toutes les nouvelles requêtes. Le device reste BUSY indéfiniment →
+          aucune donnée ne passe.
+        </p>
+        <div class="attack-brief">
+          <p><strong>Objectif :</strong> Dégrader la disponibilité en saturant la <code>Fault Queue</code> de l'IOMMU.</p>
+          <p><strong>Preuve observée :</strong> État <em>FQ Full / STALLED</em>, puis ralentissement ou blocage des flux légitimes.</p>
+          <p><strong>Conclusion :</strong> Confidentialité et intégrité sont protégées, mais la disponibilité reste attaquable.</p>
+        </div>
+
+        <ol class="step-list">
+          <li>
+            <span class="step-num success">1</span>
+            <div>
+              <strong>LHA accès normal</strong> — On lance le LHA (ID=1) vers la
+              zone guest. Résultat : <em>100/100 SUCCESS</em>. Le bus AXI
+              fonctionne normalement.
+            </div>
+          </li>
+          <li>
+            <span class="step-num danger">2</span>
+            <div>
+              <strong>MHA DoS</strong> — Le MHA lance une tempête de requêtes.
+              Résultat : quelques BLOCKED, puis <em>FQ Full → STALLED</em>.
+            </div>
+          </li>
+          <li>
+            <span class="step-num warning">3</span>
+            <div>
+              <strong>LHA après DoS</strong> — On relance le LHA. Résultat : le
+              LHA est aussi <em>bloqué/ralenti</em> car le MHA et le LHA
+              partagent le même chemin AXI. La saturation de la FQ impacte
+              <strong>tous</strong> les devices.
+            </div>
+          </li>
+        </ol>
+
+        <div class="player-container">
+          <div id="player-5"></div>
+        </div>
+
+        <div class="expected expected-info">
+          <span class="icon">⚠️</span>
+          <div>
+            <strong>Résultat :</strong> <em>DoS Partiel</em> — L'attaquant ne
+            peut PAS exfiltrer de données (confidentialité/intégrité OK), mais
+            il <strong>réussit à paralyser tout le bus</strong> (FQ Full).
+            L'IOMMU protège les données mais pas la <em>disponibilité</em>.
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <div class="footer-logo">TrustGW-SoC</div>
+      <div class="footer-info">
+        Démonstration de sécurité IOMMU RISC-V<br />
+        CVA6 64-bit • IOMMU Spec 1.0 • Genesys 2 FPGA • BAO Hypervisor
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/openhwgroup/cva6">CVA6 GitHub</a>
+        <a href="https://github.com/zero-day-labs/riscv-iommu-demo"
+          >RISC-V IOMMU</a
+        >
+        <a href="https://github.com/bao-project/bao-hypervisor"
+          >BAO Hypervisor</a
+        >
+      </div>
+    </footer>
+
+    <!-- Asciinema Player JS -->
+    <script src="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.min.js"></script>
+    <script>
+      // Options terminal - responsive avec fit:width
+      const defaultOpts = {
+        autoPlay: false,
+        speed: 1.5,
+        theme: "monokai",
+        fit: "width",
+        idleTimeLimit: 2,
+      };
+      const tallOpts = defaultOpts;
+
+      // Scenario 1a: Normal, IOMMU OFF
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/Fx4SOA7OAAoncH6H.cast",
+        document.getElementById("player-1a"),
+        defaultOpts,
+      );
+
+      // Scenario 1b: Normal, IOMMU ON
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/hVmJrIOOLV0xLux6.cast",
+        document.getElementById("player-1b"),
+        defaultOpts,
+      );
+
+      // Scenario 2: ID Spoofing
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/AfJ4HZL6EOLs2wse.cast",
+        document.getElementById("player-2"),
+        tallOpts,
+      );
+
+      // Scenario 3: Forbidden Address
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/wgtDsY54zIrJiaYR.cast",
+        document.getElementById("player-3"),
+        tallOpts,
+      );
+
+      // Scenario 4: Privilege Escalation
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/vgYmiLpehNNnrQBm.cast",
+        document.getElementById("player-4"),
+        tallOpts,
+      );
+
+      // Scenario 5: DoS
+      AsciinemaPlayer.create(
+        "https://asciinema.org/a/KF2S3N89BWapk4qd.cast",
+        document.getElementById("player-5"),
+        tallOpts,
+      );
+    </script>
+  </body>
+</html>
